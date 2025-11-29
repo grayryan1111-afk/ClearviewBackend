@@ -1,3 +1,4 @@
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -13,10 +14,7 @@ app.get("/", (req, res) => {
   res.send("Backend running!");
 });
 
-// OpenAI Routes
 app.use("/api/openai", openaiRoutes);
 
 const port = process.env.PORT || 10000;
-app.listen(port, () => {
-  console.log("Server running on port " + port);
-});
+app.listen(port, () => console.log("Server running on port " + port));
