@@ -145,4 +145,82 @@ async function countWindowsFromImage(imageUrl) {
     const windowLabel = visionResp.labelAnnotations.find((l) =>
       (l.description || "").toLowerCase().includes("window")
     );
-    if (window
+    if (windowLabel && windowLabel.score > 0.7) {
+      windowCount = 8; // rough default guess
+    }
+  }
+
+  return { windowCount };
+}
+
+// ---------- AUTO QUOTE ENDPOINT ----------
+//
+// POST /auto-quote
+// { address?: string, serviceId?: number }
+//
+// If address is blank, uses your home base.
+// Default service is Window Cleaning (id 1)
+//
+app.post("/auto-quote", async (req, res) => {
+  try {
+    if (!GOOGLE_API_KEY) {
+      return res
+        .status(500)
+        .json({ error: "GOOGLE_API_KEY is not set on the backend" });
+    }
+
+    const { address, serviceId } = req.body || {};
+    const targetAddress = address && address.trim().length > 0
+      ? address.trim()
+      : HOME_BASE_ADDRESS;
+
+    // 1) Geocode
+    const location = await geocodeAddress(targetAddress);
+
+    // 2) Build Street View image URL
+    const imageUrl = buildStreetViewUrl(location);
+
+    // 3) Vision: count windows
+    const { windowCount } = await countWindowsFromImage(imageUrl);
+
+    // 4) Get service and compute quote
+    const service =
+      services.find((s) => s.id === Number(serviceId)) ||
+      services.find((s) => s.id === 1); // default window cleaning
+
+    const pricePerUnit = service.pricePerUnit;
+    const units = windowCount || 1;
+
+    const rawSubtotal = units * pricePerUnit;
+
+    // Optional: minimum charge logic for window jobs
+    const minCharge = 150;
+    const subtotal =
+      service.id === 1 ? Math.max(rawSubtotal, minCharge) : rawSubtotal;
+
+    const tax = +(subtotal * TAX_RATE).toFixed(2);
+    const total = +(subtotal + tax).toFixed(2);
+
+    res.json({
+      address: targetAddress,
+      coords: location,
+      imageUrl,
+      service: service.name,
+      pricePerUnit,
+      windowCount,
+      units,
+      subtotal,
+      tax,
+      total,
+    });
+  } catch (err) {
+    console.error("Auto-quote error:", err);
+    res.status(500).json({ error: "Failed to generate auto quote" });
+  }
+});
+
+// --------------------------------------------------
+
+app.listen(PORT, () => {
+  console.log(`ClearView backend running on port ${PORT}`);
+});
